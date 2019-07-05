@@ -9,7 +9,7 @@ import (
 var(
 	rootCmd = &cobra.Command{
 		Use:   "s3tool",
-		Short: "s3tool operation s3 files in cloud  ",
+		Short: "s3tool operation files in jdcloud s3",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) > 0 {
 				return fmt.Errorf("'%s' is an invalid argument", args[0])

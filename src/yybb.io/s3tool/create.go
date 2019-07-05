@@ -19,6 +19,7 @@ var (
 		Use:   "create",
 		Short: "create s3 object",
 		Run: func(cmd *cobra.Command, args []string) {
+		        log.Printf("%v", default_contxt)
 			err:= createOject()
 			if err != nil {
 				log.Printf("err:%v",err)
@@ -40,9 +41,9 @@ type CreateContxt struct {
 
 func buildDefaultContext() CreateContxt {
 	return CreateContxt{
-		Endpoints:os.Getenv("S3_Endpoints"),
-		RegionId: os.Getenv("S3_RegionId"),
-		Bucket:os.Getenv("S3_Bucket"),
+		Endpoints: os.Getenv("S3_ENDPOINTS"),
+		RegionId: os.Getenv("S3_REGIONID"),
+		Bucket: os.Getenv("S3_BUCKET"),
 		Ak: os.Getenv("S3_AK"),
 		SK: os.Getenv("S3_SK"),
 	}
@@ -96,6 +97,5 @@ func createOject()  error {
 func init() {
 	rootCmd.AddCommand(createCmd)
 	createCmd.PersistentFlags().StringVarP(&default_contxt.Key, "key", "k","", "s3 store key")
-	createCmd.PersistentFlags().StringVarP(&default_contxt.Bucket, "bucket", "b", "","s3 store buket")
 	createCmd.PersistentFlags().StringVarP(&sourceFile, "file", "f", "","s3 store src file")
 }
