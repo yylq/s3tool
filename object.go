@@ -7,6 +7,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/spf13/cobra"
+	"io"
 	"log"
 	"os"
 	"path"
@@ -16,6 +17,7 @@ var (
 	default_contxt = buildDefaultContext()
 	default_type = "application/octet-stream"
 	sourceFile string
+	outputFile string
 	objtype string
 
 	objectCmd = &cobra.Command{
@@ -25,41 +27,30 @@ var (
 	createObjectCmd = &cobra.Command{
 		Use:   "create",
 		Short: "create s3 object",
-		Run: func(cmd *cobra.Command, args []string) {
-		        log.Printf("%v", default_contxt)
-			err:= createOject()
-			if err != nil {
-				log.Printf("err:%v",err)
-				return;
-			}
-			log.Printf("Successfully created bucket %s and uploaded data with key %s\n", default_contxt.Bucket, default_contxt.Key)
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return createOject()
 		},
 	}
 	deleteObjectCmd = &cobra.Command{
 		Use:   "delete",
 		Short: "delete s3 object",
-		Run: func(cmd *cobra.Command, args []string) {
-			log.Printf("%v", default_contxt)
-			err:= deleteOject()
-			if err != nil {
-				log.Printf("err:%v",err)
-				return;
-			}
-
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return deleteOject()
+		},
+	}
+	saveOjectCmd = &cobra.Command{
+		Use:   "get",
+		Short: "get s3 object",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return saveOject()
 		},
 	}
 
 	listObjectCmd = &cobra.Command{
 		Use:   "list",
 		Short: "list s3 object",
-		Run: func(cmd *cobra.Command, args []string) {
-			log.Printf("%v", default_contxt)
-			err:= listOject()
-			if err != nil {
-				log.Printf("err:%v",err)
-				return;
-			}
-
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return listOject()
 		},
 	}
 
@@ -101,7 +92,7 @@ func createOject()  error {
 	}
 	defer inputFile.Close()
     suffix := path.Ext(sourceFile)
-	log.Printf("suffix:%v", suffix)
+
     v, ok := ftype[suffix]
     if ok {
 		objtype = v
@@ -112,7 +103,7 @@ func createOject()  error {
 	creds := credentials.NewStaticCredentials(default_contxt.Ak, default_contxt.SK, "")
 	_, err = creds.Get()
 	if err != nil {
-		log.Printf("err:%v",err)
+
 		return err
 	}
 
@@ -142,12 +133,14 @@ func createOject()  error {
 		CacheControl:&cachecontrol,
 		ContentType : &objtype,
 	}
-    log.Printf("putobj:%v", putobj)
 
-	out, err := svc.PutObject(putobj)
-	log.Printf("out:%v",out)
-	log.Printf("curl http://%s.%s/%s",bucket,default_contxt.Endpoints,key)
-	return err
+	_, err = svc.PutObject(putobj)
+	if err != nil {
+		return err
+	}
+
+	log.Printf("created:[ http://%s.%s/%s ]",bucket,default_contxt.Endpoints,key)
+	return nil
 }
 
 func deleteOject()  error {
@@ -185,10 +178,12 @@ func deleteOject()  error {
 		Bucket:&default_contxt.Bucket,
 		Key:&default_contxt.Key}
 
-	out, err := svc.DeleteObject(obj)
-	log.Printf("out:%v",out)
+	_, err = svc.DeleteObject(obj)
+	if err != nil {
+		return err
+	}
 	log.Printf("delete http://%s.%s/%s",bucket,default_contxt.Endpoints,key)
-	return err
+	return nil
 }
 
 func listOject()  error {
@@ -226,21 +221,76 @@ func listOject()  error {
 		}
 
 	out, err := svc.ListObjects(obj)
-	log.Printf("out:%v",out)
 	for _, obj := range out.Contents {
-		log.Printf("curl http://%s.%s/%s",bucket,default_contxt.Endpoints,*obj.Key)
+		log.Printf("%s.%s/%s",bucket,default_contxt.Endpoints,*obj.Key)
 	}
 	return err
 }
 
+func saveOject()  error {
+	if outputFile =="" {
+		return fmt.Errorf("invalid outputFile file")
+	}
 
+
+	bucket := default_contxt.Bucket
+	key := default_contxt.Key
+	creds := credentials.NewStaticCredentials(default_contxt.Ak, default_contxt.SK, "")
+	_, err := creds.Get()
+	if err != nil {
+		return err
+	}
+
+	config := &aws.Config{
+		Region:      aws.String(default_contxt.RegionId),
+		Endpoint:    aws.String(default_contxt.Endpoints),
+		DisableSSL:  aws.Bool(true),
+		Credentials: creds,
+	}
+
+	sess, err := session.NewSession(config)
+	if err != nil {
+		return err
+	}
+
+	svc := s3.New(sess)
+	//if err = svc.WaitUntilBucketExists(&s3.HeadBucketInput{Bucket: &bucket}); err != nil {
+	//	log.Printf("WaitUntilBucketExists")
+	//	return err
+	//}
+
+	getobj := &s3.GetObjectInput{
+		Bucket: &bucket,
+		Key:    &key,
+	}
+
+
+	out, err := svc.GetObject(getobj)
+	if err != nil {
+		return err
+	}
+
+	outFile, err := os.Create(outputFile)
+	if err != nil {
+		return err
+	}
+	defer outFile.Close()
+
+	_,err= io.Copy(outFile, out.Body)
+	if err != nil {
+		return err
+	}
+	log.Printf("%s is write to:%s",key, outputFile)
+	return nil
+}
 
 func init() {
 	rootCmd.AddCommand(objectCmd)
-	objectCmd.AddCommand(createObjectCmd, deleteObjectCmd, listObjectCmd)
+	objectCmd.AddCommand(createObjectCmd, deleteObjectCmd, listObjectCmd,saveOjectCmd)
 	objectCmd.PersistentFlags().StringVarP(&default_contxt.Key, "key", "k", "", "s3 store key")
 	objectCmd.PersistentFlags().StringVarP(&default_contxt.Bucket, "bucket", "b", "", "s3 store bucket")
 	createObjectCmd.PersistentFlags().StringVarP(&sourceFile, "file", "f", "","s3 store src file")
 	createObjectCmd.PersistentFlags().StringVarP(&objtype, "type", "t", default_type,"s3 store type")
+	saveOjectCmd.PersistentFlags().StringVarP(&outputFile, "output", "o", "","s3 store output file")
 
 }

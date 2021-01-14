@@ -23,6 +23,7 @@ var(
 func main() {
 
 	if err := rootCmd.Execute(); err != nil {
+		rootCmd.OutOrStderr().Write([]byte(err.Error()))
 		os.Exit(-1)
 	}
 }
