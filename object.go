@@ -2,23 +2,25 @@ package main
 
 import (
 	"fmt"
+	"io"
+	"log"
+	"os"
+	"path"
+
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/spf13/cobra"
-	"io"
-	"log"
-	"os"
-	"path"
 )
 
 var (
 	default_contxt = buildDefaultContext()
-	default_type = "application/octet-stream"
-	sourceFile string
-	outputFile string
-	objtype string
+	default_type   = "application/octet-stream"
+	sourceFile     string
+	outputFile     string
+	objtype        string
+	max_age        int32
 
 	objectCmd = &cobra.Command{
 		Use:   "object",
@@ -55,35 +57,34 @@ var (
 	}
 
 	ftype = map[string]string{
-		".json":"application/json",
-		".xml": "text/xml",
-		".txt": "text/plain",
-		".html":"text/html",
-		".md": "text/plain",
+		".json": "application/json",
+		".xml":  "text/xml",
+		".txt":  "text/plain",
+		".html": "text/html",
+		".md":   "text/plain",
 	}
-
-
 )
+
 type s3Context struct {
 	Endpoints string
-	RegionId string
-	Bucket string
-	Ak string
-	SK string
-	Key string
+	RegionId  string
+	Bucket    string
+	Ak        string
+	SK        string
+	Key       string
 }
 
 func buildDefaultContext() s3Context {
 	return s3Context{
 		Endpoints: os.Getenv("S3_ENDPOINTS"),
-		RegionId: os.Getenv("S3_REGIONID"),
-		Bucket: os.Getenv("S3_BUCKET"),
-		Ak: os.Getenv("S3_AK"),
-		SK: os.Getenv("S3_SK"),
+		RegionId:  os.Getenv("S3_REGIONID"),
+		Bucket:    os.Getenv("S3_BUCKET"),
+		Ak:        os.Getenv("S3_AK"),
+		SK:        os.Getenv("S3_SK"),
 	}
 }
-func createOject()  error {
-	if sourceFile =="" {
+func createOject() error {
+	if sourceFile == "" {
 		return fmt.Errorf("invalid source file")
 	}
 	inputFile, err := os.Open(sourceFile)
@@ -91,10 +92,10 @@ func createOject()  error {
 		return err
 	}
 	defer inputFile.Close()
-    suffix := path.Ext(sourceFile)
+	suffix := path.Ext(sourceFile)
 
-    v, ok := ftype[suffix]
-    if ok {
+	v, ok := ftype[suffix]
+	if ok {
 		objtype = v
 	}
 
@@ -125,13 +126,13 @@ func createOject()  error {
 	//	log.Printf("WaitUntilBucketExists")
 	//	return err
 	//}
-	cachecontrol :="no-cache"
-    putobj := &s3.PutObjectInput{
-		Body:   inputFile,
-		Bucket: &bucket,
-		Key:    &key,
-		CacheControl:&cachecontrol,
-		ContentType : &objtype,
+	cachecontrol := fmt.Sprintf("max-age=%d", max_age)
+	putobj := &s3.PutObjectInput{
+		Body:         inputFile,
+		Bucket:       &bucket,
+		Key:          &key,
+		CacheControl: &cachecontrol,
+		ContentType:  &objtype,
 	}
 
 	_, err = svc.PutObject(putobj)
@@ -139,19 +140,18 @@ func createOject()  error {
 		return err
 	}
 
-	log.Printf("created:[ http://%s.%s/%s ]",bucket,default_contxt.Endpoints,key)
+	log.Printf("created:[ http://%s.%s/%s ]", bucket, default_contxt.Endpoints, key)
 	return nil
 }
 
-func deleteOject()  error {
-
+func deleteOject() error {
 
 	bucket := default_contxt.Bucket
 	key := default_contxt.Key
 	creds := credentials.NewStaticCredentials(default_contxt.Ak, default_contxt.SK, "")
 	_, err := creds.Get()
 	if err != nil {
-		log.Printf("err:%v",err)
+		log.Printf("err:%v", err)
 		return err
 	}
 
@@ -174,27 +174,26 @@ func deleteOject()  error {
 	//	return err
 	//}
 
-	obj:= &s3.DeleteObjectInput{
-		Bucket:&default_contxt.Bucket,
-		Key:&default_contxt.Key}
+	obj := &s3.DeleteObjectInput{
+		Bucket: &default_contxt.Bucket,
+		Key:    &default_contxt.Key}
 
 	_, err = svc.DeleteObject(obj)
 	if err != nil {
 		return err
 	}
-	log.Printf("delete http://%s.%s/%s",bucket,default_contxt.Endpoints,key)
+	log.Printf("delete http://%s.%s/%s", bucket, default_contxt.Endpoints, key)
 	return nil
 }
 
-func listOject()  error {
-
+func listOject() error {
 
 	bucket := default_contxt.Bucket
 
 	creds := credentials.NewStaticCredentials(default_contxt.Ak, default_contxt.SK, "")
 	_, err := creds.Get()
 	if err != nil {
-		log.Printf("err:%v",err)
+		log.Printf("err:%v", err)
 		return err
 	}
 
@@ -216,22 +215,21 @@ func listOject()  error {
 	//	log.Printf("WaitUntilBucketExists")
 	//	return err
 	//}
-	obj:= &s3.ListObjectsInput{
-		Bucket:&bucket,
-		}
+	obj := &s3.ListObjectsInput{
+		Bucket: &bucket,
+	}
 
 	out, err := svc.ListObjects(obj)
 	for _, obj := range out.Contents {
-		log.Printf("%s.%s/%s",bucket,default_contxt.Endpoints,*obj.Key)
+		log.Printf("%s.%s/%s", bucket, default_contxt.Endpoints, *obj.Key)
 	}
 	return err
 }
 
-func saveOject()  error {
-	if outputFile =="" {
+func saveOject() error {
+	if outputFile == "" {
 		return fmt.Errorf("invalid outputFile file")
 	}
-
 
 	bucket := default_contxt.Bucket
 	key := default_contxt.Key
@@ -264,7 +262,6 @@ func saveOject()  error {
 		Key:    &key,
 	}
 
-
 	out, err := svc.GetObject(getobj)
 	if err != nil {
 		return err
@@ -276,21 +273,23 @@ func saveOject()  error {
 	}
 	defer outFile.Close()
 
-	_,err= io.Copy(outFile, out.Body)
+	_, err = io.Copy(outFile, out.Body)
 	if err != nil {
 		return err
 	}
-	log.Printf("%s is write to:%s",key, outputFile)
+	log.Printf("%s is write to:%s", key, outputFile)
 	return nil
 }
 
 func init() {
 	rootCmd.AddCommand(objectCmd)
-	objectCmd.AddCommand(createObjectCmd, deleteObjectCmd, listObjectCmd,saveOjectCmd)
+	objectCmd.AddCommand(createObjectCmd, deleteObjectCmd, listObjectCmd, saveOjectCmd)
 	objectCmd.PersistentFlags().StringVarP(&default_contxt.Key, "key", "k", "", "s3 store key")
 	objectCmd.PersistentFlags().StringVarP(&default_contxt.Bucket, "bucket", "b", "", "s3 store bucket")
-	createObjectCmd.PersistentFlags().StringVarP(&sourceFile, "file", "f", "","s3 store src file")
-	createObjectCmd.PersistentFlags().StringVarP(&objtype, "type", "t", default_type,"s3 store type")
-	saveOjectCmd.PersistentFlags().StringVarP(&outputFile, "output", "o", "","s3 store output file")
+	createObjectCmd.PersistentFlags().StringVarP(&sourceFile, "file", "f", "", "s3 store src file")
+	createObjectCmd.PersistentFlags().StringVarP(&objtype, "type", "t", default_type, "s3 store type")
+	createObjectCmd.PersistentFlags().Int32VarP(&max_age, "maxage", "m", 3600, "cache control max age")
+
+	saveOjectCmd.PersistentFlags().StringVarP(&outputFile, "output", "o", "", "s3 store output file")
 
 }
